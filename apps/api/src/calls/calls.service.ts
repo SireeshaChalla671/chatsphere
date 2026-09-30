@@ -7,7 +7,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import { AccessToken, RoomServiceClient, TrackType } from 'livekit-server-sdk';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ChatsService } from '../chats/chats.service.js';
@@ -151,6 +151,43 @@ export class CallsService {
     const member = await this.chats.assertMember(call.chatId, me);
     if (call.initiatorId !== me && member.role !== 'ADMIN') throw new ForbiddenException('Only the host can end the call');
     if (call.status !== 'ENDED') await this.finish(call);
+    return { ok: true };
+  }
+
+  private async assertHost(me: string, call: { chatId: string; initiatorId: string }) {
+    const member = await this.chats.assertMember(call.chatId, me);
+    if (call.initiatorId !== me && member.role !== 'ADMIN') throw new ForbiddenException('Only the host can do this');
+  }
+
+  async muteParticipant(me: string, callId: string, targetId: string) {
+    const call = await this.getCall(callId);
+    await this.assertHost(me, call);
+    try {
+      const info = await this.rooms.getParticipant(call.roomName, targetId);
+      for (const tr of info.tracks) {
+        if (tr.type === TrackType.AUDIO && !tr.muted) {
+          await this.rooms.mutePublishedTrack(call.roomName, targetId, tr.sid, true);
+        }
+      }
+    } catch {
+      throw new NotFoundException('Participant is not in the call');
+    }
+    return { ok: true };
+  }
+
+  async removeParticipant(me: string, callId: string, targetId: string) {
+    const call = await this.getCall(callId);
+    await this.assertHost(me, call);
+    if (targetId === me) throw new BadRequestException('Use leave instead');
+    try {
+      await this.rooms.removeParticipant(call.roomName, targetId);
+    } catch {
+      throw new NotFoundException('Participant is not in the call');
+    }
+    await this.prisma.callParticipant.updateMany({
+      where: { callId, userId: targetId, leftAt: null },
+      data: { leftAt: new Date() },
+    });
     return { ok: true };
   }
 

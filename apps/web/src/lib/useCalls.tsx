@@ -89,7 +89,7 @@ export function useCalls(meId: string | undefined) {
       )}
       {joined && (
         <CallView key={joined.call.id} token={joined.token} url={joined.url} type={joined.call.type}
-          title={joined.title} isHost={joined.isHost} onLeave={leave} onEndAll={endAll} />
+          title={joined.title} isHost={joined.isHost} callId={joined.call.id} onLeave={leave} onEndAll={endAll} />
       )}
     </>
   );

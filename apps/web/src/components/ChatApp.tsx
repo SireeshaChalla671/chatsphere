@@ -4,6 +4,7 @@ import { io, Socket } from 'socket.io-client';
 import { API, api, getTokens } from '@/lib/api';
 import type { Chat, Message, User } from '@/lib/types';
 import { useCalls } from '@/lib/useCalls';
+import NewGroup from '@/components/NewGroup';
 
 const TICK = '\u2713';
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -34,7 +35,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<User[]>([]);
   const [searched, setSearched] = useState(false);
-  const calls = useCalls(me?.id);
+  const calls = useCalls(me?.id);  const [showGroup, setShowGroup] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const activeRef = useRef<string | null>(null);
@@ -163,7 +164,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="h-screen flex bg-slate-950 text-slate-100">
-      {calls.overlay}
+      {calls.overlay}{showGroup && <NewGroup onClose={() => setShowGroup(false)} onCreated={async (id) => { setShowGroup(false); await loadChats(); openChat(id); }} />}
       {/* Sidebar */}
       <aside className={(activeId ? 'hidden md:flex ' : 'flex ') + 'w-full md:w-96 flex-col border-r border-slate-800 bg-slate-900'}>
         <div className="flex items-center justify-between p-3 bg-slate-800">
@@ -173,7 +174,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
           </button>
           <button onClick={onLogout} className="text-xs text-slate-400 hover:text-white">Log out</button>
         </div>
-        <div className="p-3 space-y-2">
+        <div className="p-3 space-y-2"><button onClick={() => setShowGroup(true)} className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 py-2 text-sm font-medium">New group</button>
           <input className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm outline-none focus:ring-2 ring-emerald-500"
             placeholder="Find a user by exact email or phone, press Enter"
             value={q} onChange={(e) => { setQ(e.target.value); setSearched(false); }}

@@ -35,6 +35,16 @@ export class CallsController {
     return this.calls.leave(req.user.id, id);
   }
 
+  @Post(':id/mute/:userId')
+  mute(@Req() req: Req_, @Param('id') id: string, @Param('userId') userId: string) {
+    return this.calls.muteParticipant(req.user.id, id, userId);
+  }
+
+  @Post(':id/remove/:userId')
+  remove(@Req() req: Req_, @Param('id') id: string, @Param('userId') userId: string) {
+    return this.calls.removeParticipant(req.user.id, id, userId);
+  }
+
   @Post(':id/end')
   end(@Req() req: Req_, @Param('id') id: string) {
     return this.calls.end(req.user.id, id);

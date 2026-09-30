@@ -1,8 +1,9 @@
 'use client';
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { Participant, Room, RoomEvent, Track } from 'livekit-client';
+import { api } from '@/lib/api';
 
-function Tile({ p, local }: { p: Participant; local: boolean }) {
+function Tile({ p, local, host, callId }: { p: Participant; local: boolean; host: boolean; callId: string }) {
   const v = useRef<HTMLVideoElement>(null);
   const a = useRef<HTMLAudioElement>(null);
 
@@ -29,6 +30,12 @@ function Tile({ p, local }: { p: Participant; local: boolean }) {
           {(p.name || '?')[0]?.toUpperCase()}
         </div>
       )}
+            {host && !local && (
+        <div className="absolute top-1 right-1 flex gap-1">
+          <button className="text-xs bg-black/60 hover:bg-black/80 rounded px-2 py-0.5" onClick={() => api('/calls/' + callId + '/mute/' + p.identity, { method: 'POST' }).catch(() => {})}>Mute</button>
+          <button className="text-xs bg-red-700/80 hover:bg-red-600 rounded px-2 py-0.5" onClick={() => api('/calls/' + callId + '/remove/' + p.identity, { method: 'POST' }).catch(() => {})}>Remove</button>
+        </div>
+      )}
       <div className="absolute bottom-1 left-2 text-xs bg-black/60 rounded px-2 py-0.5">
         {p.name || 'User'}{local ? ' (you)' : ''}{!p.isMicrophoneEnabled ? ' - muted' : ''}
       </div>
@@ -37,11 +44,11 @@ function Tile({ p, local }: { p: Participant; local: boolean }) {
 }
 
 type Props = {
-  token: string; url: string; type: 'VOICE' | 'VIDEO'; title: string; isHost: boolean;
+  token: string; url: string; type: 'VOICE' | 'VIDEO'; title: string; isHost: boolean; callId: string;
   onLeave: () => void; onEndAll: () => void;
 };
 
-export default function CallView({ token, url, type, title, isHost, onLeave, onEndAll }: Props) {
+export default function CallView({ token, url, type, title, isHost, callId, onLeave, onEndAll }: Props) {
   const roomRef = useRef<Room | null>(null);
   const leaveRef = useRef(onLeave);
   const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -114,7 +121,7 @@ export default function CallView({ token, url, type, title, isHost, onLeave, onE
       </div>
 
       <div className={'flex-1 overflow-auto p-3 grid gap-3 content-center ' + cols}>
-        {parts.map((p) => <Tile key={p.identity} p={p} local={p === lp} />)}
+        {parts.map((p) => <Tile key={p.identity} p={p} local={p === lp} host={isHost} callId={callId} />)}
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-3 p-4 bg-slate-900">
