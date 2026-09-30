@@ -2,7 +2,8 @@ export type User = { id: string; name: string; avatarUrl?: string | null; about?
 export type Receipt = { messageId: string; userId: string; deliveredAt: string | null; readAt: string | null };
 export type Message = {
   id: string; chatId: string; senderId: string; body: string | null; createdAt: string;
-  deletedForAll: boolean; type?: string; mediaUrl?: string | null; mediaMime?: string | null; mediaName?: string | null; mediaSize?: number | null; sender?: User; receipts?: Receipt[];
+  deletedForAll: boolean; editedAt?: string | null; reactions?: { userId: string; emoji: string }[];
+  replyTo?: { id: string; body: string | null; type?: string; deletedForAll?: boolean; sender?: { id: string; name: string } } | null; type?: string; mediaUrl?: string | null; mediaMime?: string | null; mediaName?: string | null; mediaSize?: number | null; sender?: User; receipts?: Receipt[];
 };
 export type Chat = {
   id: string; type: 'DIRECT' | 'GROUP'; name: string | null; createdAt: string; lastMessageAt: string | null;

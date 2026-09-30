@@ -38,6 +38,10 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
   const [results, setResults] = useState<User[]>([]);
   const [searched, setSearched] = useState(false);
   const calls = useCalls(me?.id);  const [showGroup, setShowGroup] = useState(false);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [editing, setEditing] = useState<Message | null>(null);
+  const [sq, setSq] = useState('');
+  const [sres, setSres] = useState<(Message & { chat: { id: string } })[]>([]);
 
   const socketRef = useRef<Socket | null>(null);
   const activeRef = useRef<string | null>(null);
@@ -105,6 +109,15 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
         });
       });
 
+      s.on('message:updated', (m: Message) => {
+        setMessages((p) => {
+          const l = p[m.chatId];
+          if (!l) return p;
+          return { ...p, [m.chatId]: l.map((x) => (x.id === m.id ? m : x)) };
+        });
+        setChats((p) => p.map((ch) => (ch.lastMessage?.id === m.id ? { ...ch, lastMessage: m } : ch)));
+      });
+
       s.on('typing', (d: { chatId: string; typing: boolean }) => setTyping((p) => ({ ...p, [d.chatId]: d.typing })));
       s.on('presence', (d: { userId: string; online: boolean }) =>
         setOnline((p) => { const n = new Set(p); if (d.online) n.add(d.userId); else n.delete(d.userId); return n; }));
@@ -115,7 +128,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, activeId]);
 
   async function openChat(id: string) {
-    setActiveId(id); activeRef.current = id;
+    setActiveId(id); activeRef.current = id; setReplyTo(null); setEditing(null);
     const r = await api<{ items: Message[] }>('/chats/' + id + '/messages?limit=50');
     setMessages((p) => ({ ...p, [id]: r.items.slice().reverse() }));
     setChats((p) => p.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
@@ -124,12 +137,24 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
 
   function send() {
     const body = text.trim();
+    if (editing && body) {
+      socketRef.current?.emit('message:edit', { messageId: editing.id, body }, (ack: { ok: boolean; error?: string }) => {
+        if (!ack?.ok) alert(ack?.error ?? 'Edit failed');
+      });
+      setEditing(null); setText('');
+      return;
+    }
     if (!body || !activeId) return;
-    socketRef.current?.emit('message:send', { chatId: activeId, body, clientId: uid() }, (ack: { ok: boolean; error?: string }) => {
+    socketRef.current?.emit('message:send', { chatId: activeId, body, clientId: uid(), replyToId: replyTo?.id }, (ack: { ok: boolean; error?: string }) => {
       if (!ack?.ok) alert(ack?.error ?? 'Send failed');
     });
     socketRef.current?.emit('typing', { chatId: activeId, typing: false });
-    setText('');
+    setText(''); setReplyTo(null);
+  }
+
+  async function searchMsgs() {
+    if (sq.trim().length < 2) { setSres([]); return; }
+    setSres(await api<(Message & { chat: { id: string } })[]>('/chats/search?q=' + encodeURIComponent(sq.trim())));
   }
 
   function sendMedia(media: MediaInfo) {
@@ -184,6 +209,16 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
           <button onClick={onLogout} className="text-xs text-slate-400 hover:text-white">Log out</button>
         </div>
         <div className="p-3 space-y-2"><button onClick={() => setShowGroup(true)} className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 py-2 text-sm font-medium">New group</button>
+          <input className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm outline-none focus:ring-2 ring-emerald-500"
+            placeholder="Search messages, press Enter" value={sq}
+            onChange={(e) => { setSq(e.target.value); if (!e.target.value) setSres([]); }}
+            onKeyDown={(e) => e.key === 'Enter' && searchMsgs()} />
+          {sres.map((r) => (
+            <button key={r.id} onClick={() => { setSres([]); setSq(''); openChat(r.chat.id); }}
+              className="w-full text-left rounded-lg bg-slate-800 hover:bg-slate-700 px-3 py-2 text-xs">
+              <span className="text-emerald-400">{r.sender?.name || 'User'}</span>: {r.body}
+            </button>
+          ))}
           <input className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm outline-none focus:ring-2 ring-emerald-500"
             placeholder="Find a user by exact email or phone, press Enter"
             value={q} onChange={(e) => { setQ(e.target.value); setSearched(false); }}
@@ -250,7 +285,10 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
                   <div key={m.id} className={'flex ' + (mine ? 'justify-end' : 'justify-start')}>
                     <div className={'max-w-[75%] rounded-2xl px-3 py-2 text-sm ' + (mine ? 'bg-emerald-700 rounded-br-sm' : 'bg-slate-800 rounded-bl-sm')}>
                       {!mine && active.type === 'GROUP' && <div className="text-xs text-emerald-400">{m.sender?.name}</div>}
-                      <MessageContent m={m} />
+                      <MessageContent m={m} meId={me.id} onReply={() => setReplyTo(m)}
+                        onEdit={() => { setEditing(m); setText(m.body ?? ''); }}
+                        onDelete={() => { if (confirm('Delete this message for everyone?')) socketRef.current?.emit('message:delete', { messageId: m.id }); }}
+                        onReact={(emoji) => socketRef.current?.emit('message:react', { messageId: m.id, emoji })} />
                       <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-slate-300/70 align-bottom">
                         {fmt(m.createdAt)}
                         {st && <span className={st === 'read' ? 'text-sky-400' : ''}>{st === 'sent' ? TICK : TICK + TICK}</span>}
@@ -261,6 +299,12 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
               })}
               <div ref={bottomRef} />
             </div>
+            {(replyTo || editing) && (
+              <div className="flex items-center justify-between px-4 py-2 bg-slate-800 border-t border-slate-700 text-xs text-slate-300">
+                <span className="truncate">{editing ? 'Editing message' : 'Replying to ' + (replyTo?.sender?.name || 'message') + ': ' + (replyTo?.body || 'media')}</span>
+                <button onClick={() => { setReplyTo(null); setEditing(null); setText(''); }} className="ml-3 text-slate-400 hover:text-white">Cancel</button>
+              </div>
+            )}
             <div className="flex gap-2 p-3 bg-slate-800">
               <MediaButtons onSend={sendMedia} /><input className="flex-1 rounded-full bg-slate-700 px-4 py-2 outline-none focus:ring-2 ring-emerald-500"
                 placeholder="Type a message" value={text} onChange={(e) => onType(e.target.value)}

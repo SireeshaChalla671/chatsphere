@@ -126,6 +126,39 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
   }
 
+  @SubscribeMessage('message:edit')
+  async onEdit(@ConnectedSocket() client: Socket, @MessageBody() data: { messageId: string; body: string }) {
+    try {
+      const m = await this.chats.editMessage(client.data.userId as string, data.messageId, data.body ?? '');
+      this.server.to(`chat:${m.chatId}`).emit('message:updated', m);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
+  @SubscribeMessage('message:delete')
+  async onDelete(@ConnectedSocket() client: Socket, @MessageBody() data: { messageId: string }) {
+    try {
+      const m = await this.chats.deleteForAll(client.data.userId as string, data.messageId);
+      this.server.to(`chat:${m.chatId}`).emit('message:updated', m);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
+  @SubscribeMessage('message:react')
+  async onReact(@ConnectedSocket() client: Socket, @MessageBody() data: { messageId: string; emoji: string }) {
+    try {
+      const m = await this.chats.toggleReaction(client.data.userId as string, data.messageId, data.emoji);
+      this.server.to(`chat:${m.chatId}`).emit('message:updated', m);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: (e as Error).message };
+    }
+  }
+
   @SubscribeMessage('chat:join')
   async onJoin(@ConnectedSocket() client: Socket, @MessageBody() data: { chatId: string }) {
     const me = client.data.userId as string;

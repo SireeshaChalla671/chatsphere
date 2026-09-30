@@ -26,6 +26,7 @@ model User {
   receipts           MessageReceipt[]
   callsStarted       Call[]            @relation("CallInitiator")
   callParticipations CallParticipant[]
+  reactions          Reaction[]
 }
 
 model Device {
@@ -125,6 +126,7 @@ model Message {
   replyToId     String?
   replyTo       Message?         @relation("Replies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies       Message[]        @relation("Replies")
+  reactions     Reaction[]
   editedAt      DateTime?
   deletedForAll Boolean          @default(false)
   mediaUrl      String?
@@ -187,4 +189,15 @@ model CallParticipant {
   leftAt   DateTime?
 
   @@unique([callId, userId])
+}
+model Reaction {
+  id        String   @id @default(uuid())
+  messageId String
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emoji     String
+  createdAt DateTime @default(now())
+
+  @@unique([messageId, userId])
 }

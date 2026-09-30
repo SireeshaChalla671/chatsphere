@@ -25,6 +25,11 @@ export class ChatsController {
     return this.chats.listChats(req.user.id);
   }
 
+  @Get('search')
+  search(@Req() req: Req_, @Query('q') q = '') {
+    return this.chats.searchMessages(req.user.id, q);
+  }
+
   @Get(':id/messages')
   messages(
     @Req() req: Req_,

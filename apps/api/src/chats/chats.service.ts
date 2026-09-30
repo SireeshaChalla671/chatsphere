@@ -2,6 +2,14 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from '../prisma/prisma.service.js';
 
 const userSelect = { id: true, name: true, avatarUrl: true, about: true } as const;
+const messageInclude = {
+  sender: { select: userSelect },
+  receipts: true,
+  reactions: true,
+  replyTo: {
+    select: { id: true, body: true, type: true, deletedForAll: true, sender: { select: { id: true, name: true } } },
+  },
+} as const;
 const MEDIA_URL = /^\/media\/[a-f0-9-]{36}(\.[a-z0-9]{1,10})?$/i;
 export type MediaInput = {
   type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
@@ -117,6 +125,67 @@ export class ChatsService {
     return { ok: true };
   }
 
+  private getMessageFull(id: string) {
+    return this.prisma.message.findUniqueOrThrow({ where: { id }, include: messageInclude });
+  }
+
+  async editMessage(me: string, messageId: string, body: string) {
+    const m = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!m) throw new NotFoundException('Message not found');
+    if (m.senderId !== me) throw new ForbiddenException('You can only edit your own messages');
+    if (m.deletedForAll) throw new BadRequestException('Message was deleted');
+    if (m.type !== 'TEXT') throw new BadRequestException('Only text messages can be edited');
+    if (Date.now() - m.createdAt.getTime() > 15 * 60_000) throw new BadRequestException('Messages can only be edited within 15 minutes');
+    const text = body.trim();
+    if (!text || text.length > 4000) throw new BadRequestException('Invalid message');
+    await this.prisma.message.update({ where: { id: messageId }, data: { body: text, editedAt: new Date() } });
+    return this.getMessageFull(messageId);
+  }
+
+  async deleteForAll(me: string, messageId: string) {
+    const m = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!m) throw new NotFoundException('Message not found');
+    if (m.senderId !== me) throw new ForbiddenException('You can only delete your own messages');
+    await this.prisma.message.update({
+      where: { id: messageId },
+      data: { deletedForAll: true, body: null, mediaUrl: null, mediaName: null, mediaMime: null, mediaSize: null },
+    });
+    return this.getMessageFull(messageId);
+  }
+
+  async toggleReaction(me: string, messageId: string, emoji: string) {
+    const m = await this.prisma.message.findUnique({ where: { id: messageId } });
+    if (!m) throw new NotFoundException('Message not found');
+    await this.assertMember(m.chatId, me);
+    if (!emoji || emoji.length > 8) throw new BadRequestException('Invalid emoji');
+    const existing = await this.prisma.reaction.findUnique({ where: { messageId_userId: { messageId, userId: me } } });
+    if (existing && existing.emoji === emoji) {
+      await this.prisma.reaction.delete({ where: { id: existing.id } });
+    } else {
+      await this.prisma.reaction.upsert({
+        where: { messageId_userId: { messageId, userId: me } },
+        update: { emoji },
+        create: { messageId, userId: me, emoji },
+      });
+    }
+    return this.getMessageFull(messageId);
+  }
+
+  async searchMessages(me: string, q: string) {
+    const term = q.trim();
+    if (term.length < 2) return [];
+    return this.prisma.message.findMany({
+      where: {
+        deletedForAll: false,
+        body: { contains: term, mode: 'insensitive' },
+        chat: { members: { some: { userId: me } } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      include: { sender: { select: userSelect }, chat: { select: { id: true, type: true, name: true } } },
+    });
+  }
+
   async listChats(me: string) {
     const memberships = await this.prisma.chatMember.findMany({
       where: { userId: me, archived: false },
@@ -160,7 +229,7 @@ export class ChatsService {
       orderBy: { createdAt: 'desc' },
       take: take + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: { sender: { select: userSelect }, receipts: true },
+      include: messageInclude,
     });
 
     const hasMore = items.length > take;
@@ -176,11 +245,15 @@ export class ChatsService {
     if (clientId) {
       const dup = await this.prisma.message.findUnique({
         where: { senderId_clientId: { senderId: me, clientId } },
-        include: { sender: { select: userSelect }, receipts: true },
+        include: messageInclude,
       });
       if (dup) return dup;
     }
 
+    if (replyToId) {
+      const ref = await this.prisma.message.findUnique({ where: { id: replyToId }, select: { chatId: true } });
+      if (ref?.chatId !== chatId) replyToId = undefined;
+    }
     const others = await this.prisma.chatMember.findMany({
       where: { chatId, userId: { not: me } },
       select: { userId: true },
@@ -205,7 +278,7 @@ export class ChatsService {
           replyToId,
           receipts: { create: others.map((o) => ({ userId: o.userId })) },
         },
-        include: { sender: { select: userSelect }, receipts: true },
+        include: messageInclude,
       }),
       this.prisma.chat.update({ where: { id: chatId }, data: { lastMessageAt: new Date() } }),
     ]);
