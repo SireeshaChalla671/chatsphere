@@ -8,19 +8,22 @@ datasource db {
 }
 
 model User {
-  id            String         @id @default(uuid())
-  phone         String?        @unique
-  email         String?        @unique
-  name          String         @default("")
+  id            String           @id @default(uuid())
+  phone         String?          @unique
+  email         String?          @unique
+  name          String           @default("")
   avatarUrl     String?
-  about         String         @default("Hey there! I am using ChatSphere")
+  about         String           @default("Hey there! I am using ChatSphere")
   lastSeenAt    DateTime?
-  showLastSeen  Boolean        @default(true)
-  showAvatar    Boolean        @default(true)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  showLastSeen  Boolean          @default(true)
+  showAvatar    Boolean          @default(true)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
   devices       Device[]
   refreshTokens RefreshToken[]
+  chatMembers   ChatMember[]
+  messages      Message[]
+  receipts      MessageReceipt[]
 }
 
 model Device {
@@ -55,4 +58,87 @@ model RefreshToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+enum ChatType {
+  DIRECT
+  GROUP
+}
+
+enum MemberRole {
+  ADMIN
+  MEMBER
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  LOCATION
+  CONTACT
+}
+
+model Chat {
+  id            String       @id @default(uuid())
+  type          ChatType
+  name          String?
+  avatarUrl     String?
+  directKey     String?      @unique
+  createdById   String?
+  createdAt     DateTime     @default(now())
+  lastMessageAt DateTime?
+  members       ChatMember[]
+  messages      Message[]
+}
+
+model ChatMember {
+  id         String     @id @default(uuid())
+  chatId     String
+  chat       Chat       @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       MemberRole @default(MEMBER)
+  joinedAt   DateTime   @default(now())
+  lastReadAt DateTime?
+  muted      Boolean    @default(false)
+  pinned     Boolean    @default(false)
+  archived   Boolean    @default(false)
+
+  @@unique([chatId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id            String           @id @default(uuid())
+  chatId        String
+  chat          Chat             @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  senderId      String
+  sender        User             @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  type          MessageType      @default(TEXT)
+  body          String?
+  clientId      String?
+  replyToId     String?
+  replyTo       Message?         @relation("Replies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies       Message[]        @relation("Replies")
+  editedAt      DateTime?
+  deletedForAll Boolean          @default(false)
+  createdAt     DateTime         @default(now())
+  receipts      MessageReceipt[]
+
+  @@unique([senderId, clientId])
+  @@index([chatId, createdAt])
+}
+
+model MessageReceipt {
+  id          String    @id @default(uuid())
+  messageId   String
+  message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveredAt DateTime?
+  readAt      DateTime?
+
+  @@unique([messageId, userId])
 }
