@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { API, api, getTokens } from '@/lib/api';
 import type { Chat, Message, User } from '@/lib/types';
+import { useCalls } from '@/lib/useCalls';
 
 const TICK = '\u2713';
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -33,6 +34,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<User[]>([]);
   const [searched, setSearched] = useState(false);
+  const calls = useCalls(me?.id);
 
   const socketRef = useRef<Socket | null>(null);
   const activeRef = useRef<string | null>(null);
@@ -161,6 +163,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="h-screen flex bg-slate-950 text-slate-100">
+      {calls.overlay}
       {/* Sidebar */}
       <aside className={(activeId ? 'hidden md:flex ' : 'flex ') + 'w-full md:w-96 flex-col border-r border-slate-800 bg-slate-900'}>
         <div className="flex items-center justify-between p-3 bg-slate-800">
@@ -226,6 +229,8 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
                   {typing[active.id] ? <span className="text-emerald-400">typing...</span> : other ? (online.has(other.id) ? 'online' : 'offline') : active.members.length + ' members'}
                 </div>
               </div>
+                          <button onClick={() => calls.start(active.id, 'VOICE', titleOf(active, me.id))} className="rounded-full bg-slate-700 hover:bg-slate-600 px-3 py-1 text-sm">Voice</button>
+              <button onClick={() => calls.start(active.id, 'VIDEO', titleOf(active, me.id))} className="rounded-full bg-emerald-600 hover:bg-emerald-500 px-3 py-1 text-sm">Video</button>
             </header>
             <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-950">
               {list.map((m) => {

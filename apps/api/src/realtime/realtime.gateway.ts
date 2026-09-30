@@ -66,6 +66,10 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     }
   }
 
+  emitToUser(userId: string, event: string, payload: unknown) {
+    this.server.to(`user:${userId}`).emit(event, payload);
+  }
+
   private async markDeliveredForUser(userId: string) {
     const pending = await this.prisma.messageReceipt.findMany({
       where: { userId, deliveredAt: null },

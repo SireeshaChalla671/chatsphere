@@ -21,9 +21,11 @@ model User {
   updatedAt     DateTime         @updatedAt
   devices       Device[]
   refreshTokens RefreshToken[]
-  chatMembers   ChatMember[]
-  messages      Message[]
-  receipts      MessageReceipt[]
+  chatMembers        ChatMember[]
+  messages           Message[]
+  receipts           MessageReceipt[]
+  callsStarted       Call[]            @relation("CallInitiator")
+  callParticipations CallParticipant[]
 }
 
 model Device {
@@ -91,6 +93,7 @@ model Chat {
   lastMessageAt DateTime?
   members       ChatMember[]
   messages      Message[]
+  calls Call[]
 }
 
 model ChatMember {
@@ -141,4 +144,43 @@ model MessageReceipt {
   readAt      DateTime?
 
   @@unique([messageId, userId])
+}
+enum CallType {
+  VOICE
+  VIDEO
+}
+
+enum CallStatus {
+  RINGING
+  ACTIVE
+  ENDED
+}
+
+model Call {
+  id           String            @id @default(uuid())
+  chatId       String
+  chat         Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  initiatorId  String
+  initiator    User              @relation("CallInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  type         CallType
+  status       CallStatus        @default(RINGING)
+  roomName     String            @unique
+  createdAt    DateTime          @default(now())
+  startedAt    DateTime?
+  endedAt      DateTime?
+  participants CallParticipant[]
+
+  @@index([chatId, createdAt])
+}
+
+model CallParticipant {
+  id       String    @id @default(uuid())
+  callId   String
+  call     Call      @relation(fields: [callId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
+
+  @@unique([callId, userId])
 }

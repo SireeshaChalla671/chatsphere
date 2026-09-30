@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { UsersModule } from './users/users.module.js';
 import { ChatsModule } from './chats/chats.module.js';
 import { RealtimeModule } from './realtime/realtime.module.js';
+import { CallsModule } from './calls/calls.module.js';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { RealtimeModule } from './realtime/realtime.module.js';
     UsersModule,
     ChatsModule,
     RealtimeModule,
+    CallsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
