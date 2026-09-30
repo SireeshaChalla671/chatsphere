@@ -94,12 +94,12 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @SubscribeMessage('message:send')
   async onSend(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { chatId: string; body: string; clientId?: string; replyToId?: string },
+    @MessageBody() data: { chatId: string; body?: string; clientId?: string; replyToId?: string; media?: { type: "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT"; url: string; mime?: string; name?: string; size?: number } },
   ) {
     const me = client.data.userId as string;
-    if (!me || !data?.body?.trim()) return { ok: false, error: 'invalid' };
+    if (!me || (!data?.body?.trim() && !data?.media?.url)) return { ok: false, error: 'invalid' };
     try {
-      const message = await this.chats.sendMessage(me, data.chatId, data.body, data.clientId, data.replyToId);
+      const message = await this.chats.sendMessage(me, data.chatId, data.body ?? "", data.clientId, data.replyToId, data.media);
       const members = await this.prisma.chatMember.findMany({ where: { chatId: data.chatId }, select: { userId: true } });
       members.forEach((m) => this.server.in(`user:${m.userId}`).socketsJoin(`chat:${data.chatId}`));
       this.server.to(`chat:${data.chatId}`).emit('message:new', message);

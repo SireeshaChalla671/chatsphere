@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module.js';
 import { ChatsModule } from './chats/chats.module.js';
 import { RealtimeModule } from './realtime/realtime.module.js';
 import { CallsModule } from './calls/calls.module.js';
+import { MediaModule } from './media/media.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CallsModule } from './calls/calls.module.js';
     ChatsModule,
     RealtimeModule,
     CallsModule,
+    MediaModule,
   ],
   controllers: [AppController],
   providers: [AppService],

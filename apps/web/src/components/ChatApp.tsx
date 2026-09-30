@@ -5,6 +5,8 @@ import { API, api, getTokens } from '@/lib/api';
 import type { Chat, Message, User } from '@/lib/types';
 import { useCalls } from '@/lib/useCalls';
 import NewGroup from '@/components/NewGroup';
+import MessageContent, { mediaLabel } from '@/components/MessageContent';
+import MediaButtons, { type MediaInfo } from '@/components/MediaButtons';
 
 const TICK = '\u2713';
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -130,6 +132,13 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
     setText('');
   }
 
+  function sendMedia(media: MediaInfo) {
+    if (!activeId) return;
+    socketRef.current?.emit('message:send', { chatId: activeId, body: '', media, clientId: uid() }, (ack: { ok: boolean; error?: string }) => {
+      if (!ack?.ok) alert(ack?.error ?? 'Send failed');
+    });
+  }
+
   function onType(v: string) {
     setText(v);
     if (!activeId) return;
@@ -204,7 +213,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
                   </span>
                   <span className="flex justify-between">
                     <span className="text-sm text-slate-400 truncate">
-                      {typing[c.id] ? <em className="text-emerald-400">typing...</em> : c.lastMessage ? (c.lastMessage.deletedForAll ? 'Message deleted' : c.lastMessage.body) : 'No messages yet'}
+                      {typing[c.id] ? <em className="text-emerald-400">typing...</em> : c.lastMessage ? (c.lastMessage.deletedForAll ? 'Message deleted' : (c.lastMessage.body || mediaLabel(c.lastMessage))) : 'No messages yet'}
                     </span>
                     {c.unreadCount > 0 && <span className="ml-2 rounded-full bg-emerald-600 text-xs px-2 py-0.5">{c.unreadCount}</span>}
                   </span>
@@ -241,7 +250,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
                   <div key={m.id} className={'flex ' + (mine ? 'justify-end' : 'justify-start')}>
                     <div className={'max-w-[75%] rounded-2xl px-3 py-2 text-sm ' + (mine ? 'bg-emerald-700 rounded-br-sm' : 'bg-slate-800 rounded-bl-sm')}>
                       {!mine && active.type === 'GROUP' && <div className="text-xs text-emerald-400">{m.sender?.name}</div>}
-                      <span className="whitespace-pre-wrap break-words">{m.deletedForAll ? 'This message was deleted' : m.body}</span>
+                      <MessageContent m={m} />
                       <span className="ml-2 inline-flex items-center gap-1 text-[10px] text-slate-300/70 align-bottom">
                         {fmt(m.createdAt)}
                         {st && <span className={st === 'read' ? 'text-sky-400' : ''}>{st === 'sent' ? TICK : TICK + TICK}</span>}
@@ -253,7 +262,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
               <div ref={bottomRef} />
             </div>
             <div className="flex gap-2 p-3 bg-slate-800">
-              <input className="flex-1 rounded-full bg-slate-700 px-4 py-2 outline-none focus:ring-2 ring-emerald-500"
+              <MediaButtons onSend={sendMedia} /><input className="flex-1 rounded-full bg-slate-700 px-4 py-2 outline-none focus:ring-2 ring-emerald-500"
                 placeholder="Type a message" value={text} onChange={(e) => onType(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && send()} />
               <button onClick={send} disabled={!text.trim()} className="rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 px-5 font-medium">Send</button>

@@ -127,6 +127,10 @@ model Message {
   replies       Message[]        @relation("Replies")
   editedAt      DateTime?
   deletedForAll Boolean          @default(false)
+  mediaUrl      String?
+  mediaMime     String?
+  mediaName     String?
+  mediaSize     Int?
   createdAt     DateTime         @default(now())
   receipts      MessageReceipt[]
 

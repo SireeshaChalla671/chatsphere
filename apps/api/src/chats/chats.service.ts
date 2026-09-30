@@ -2,6 +2,14 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { PrismaService } from '../prisma/prisma.service.js';
 
 const userSelect = { id: true, name: true, avatarUrl: true, about: true } as const;
+const MEDIA_URL = /^\/media\/[a-f0-9-]{36}(\.[a-z0-9]{1,10})?$/i;
+export type MediaInput = {
+  type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
+  url: string;
+  mime?: string;
+  name?: string;
+  size?: number;
+};
 
 @Injectable()
 export class ChatsService {
@@ -162,7 +170,7 @@ export class ChatsService {
     return { items: page, nextCursor: hasMore ? page[page.length - 1].id : null };
   }
 
-  async sendMessage(me: string, chatId: string, body: string, clientId?: string, replyToId?: string) {
+  async sendMessage(me: string, chatId: string, body: string, clientId?: string, replyToId?: string, media?: MediaInput) {
     await this.assertMember(chatId, me);
 
     if (clientId) {
@@ -183,7 +191,16 @@ export class ChatsService {
         data: {
           chatId,
           senderId: me,
-          body,
+          body: body || null,
+          ...(media && MEDIA_URL.test(media.url)
+            ? {
+                type: media.type,
+                mediaUrl: media.url,
+                mediaMime: media.mime,
+                mediaName: media.name,
+                mediaSize: Number.isInteger(media.size) ? media.size : null,
+              }
+            : {}),
           clientId,
           replyToId,
           receipts: { create: others.map((o) => ({ userId: o.userId })) },
