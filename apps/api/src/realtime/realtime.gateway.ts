@@ -61,7 +61,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     if (!set || set.size === 0) {
       this.online.delete(userId);
       const lastSeenAt = new Date();
-      await this.prisma.user.update({ where: { id: userId }, data: { lastSeenAt } });
+      await this.prisma.user.update({ where: { id: userId }, data: { lastSeenAt } }).catch(() => undefined);
       this.server.emit('presence', { userId, online: false, lastSeenAt });
     }
   }

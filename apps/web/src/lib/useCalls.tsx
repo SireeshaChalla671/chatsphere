@@ -63,6 +63,10 @@ export function useCalls(meId: string | undefined) {
     if (j) api('/calls/' + j.call.id + '/end', { method: 'POST' }).catch(() => {});
   }
 
+  useEffect(() => {
+    if (incoming && !joined && sessionStorage.getItem('autoAccept')) accept();
+  });
+
   const overlay = (
     <>
       {error && (
