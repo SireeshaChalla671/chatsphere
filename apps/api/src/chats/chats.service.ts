@@ -80,7 +80,7 @@ export class ChatsService {
       orderBy: { createdAt: 'desc' },
       take: take + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-      include: { sender: { select: userSelect } },
+      include: { sender: { select: userSelect }, receipts: true },
     });
 
     const hasMore = items.length > take;
@@ -96,7 +96,7 @@ export class ChatsService {
     if (clientId) {
       const dup = await this.prisma.message.findUnique({
         where: { senderId_clientId: { senderId: me, clientId } },
-        include: { sender: { select: userSelect } },
+        include: { sender: { select: userSelect }, receipts: true },
       });
       if (dup) return dup;
     }
@@ -116,7 +116,7 @@ export class ChatsService {
           replyToId,
           receipts: { create: others.map((o) => ({ userId: o.userId })) },
         },
-        include: { sender: { select: userSelect } },
+        include: { sender: { select: userSelect }, receipts: true },
       }),
       this.prisma.chat.update({ where: { id: chatId }, data: { lastMessageAt: new Date() } }),
     ]);

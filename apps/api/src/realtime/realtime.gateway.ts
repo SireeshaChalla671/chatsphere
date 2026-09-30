@@ -96,7 +96,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     if (!me || !data?.body?.trim()) return { ok: false, error: 'invalid' };
     try {
       const message = await this.chats.sendMessage(me, data.chatId, data.body, data.clientId, data.replyToId);
-      this.server.in(`chat:${data.chatId}`).socketsJoin(`chat:${data.chatId}`); // no-op safety
+      const members = await this.prisma.chatMember.findMany({ where: { chatId: data.chatId }, select: { userId: true } });
+      members.forEach((m) => this.server.in(`user:${m.userId}`).socketsJoin(`chat:${data.chatId}`));
       this.server.to(`chat:${data.chatId}`).emit('message:new', message);
 
       // mark delivered for recipients who are online right now
