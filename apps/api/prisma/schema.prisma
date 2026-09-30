@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(uuid())
+  phone         String?        @unique
+  email         String?        @unique
+  name          String         @default("")
+  avatarUrl     String?
+  about         String         @default("Hey there! I am using ChatSphere")
+  lastSeenAt    DateTime?
+  showLastSeen  Boolean        @default(true)
+  showAvatar    Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  devices       Device[]
+  refreshTokens RefreshToken[]
+}
+
+model Device {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label     String?
+  platform  String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model OtpCode {
+  id         String   @id @default(uuid())
+  identifier String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@index([identifier])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
