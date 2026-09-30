@@ -7,46 +7,92 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { Redis } from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ChatsService } from '../chats/chats.service.js';
 
+type MediaIn = { type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT'; url: string; mime?: string; name?: string; size?: number };
+const pkey = (userId: string) => `presence:${userId}`;
+
 @WebSocketGateway({ cors: { origin: true, credentials: true } })
-export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit, OnModuleDestroy {
   @WebSocketServer() server!: Server;
-  private online = new Map<string, Set<string>>(); // userId -> socket ids
+  private redis: Redis;
 
   constructor(
     private jwt: JwtService,
     private config: ConfigService,
     private prisma: PrismaService,
     private chats: ChatsService,
-  ) {}
+  ) {
+    this.redis = new Redis(config.get<string>('REDIS_URL') ?? 'redis://localhost:6379');
+    this.redis.on('error', () => undefined);
+  }
+
+  async onModuleInit() {
+    // Single-instance safety: a crash can leave stale presence keys, so clear them on boot.
+    try {
+      const keys = await this.redis.keys('presence:*');
+      if (keys.length) await this.redis.del(...keys);
+    } catch {
+      /* redis unavailable */
+    }
+  }
+
+  async onModuleDestroy() {
+    this.redis.disconnect();
+  }
+
+  emitToUser(userId: string, event: string, payload: unknown) {
+    this.server.to(`user:${userId}`).emit(event, payload);
+  }
+
+  private async chatIdsOf(userId: string) {
+    const rows = await this.prisma.chatMember.findMany({ where: { userId }, select: { chatId: true } });
+    return rows.map((r) => r.chatId);
+  }
+
+  private async isOnline(userId: string) {
+    try {
+      return (await this.redis.scard(pkey(userId))) > 0;
+    } catch {
+      return false;
+    }
+  }
 
   async handleConnection(client: Socket) {
     try {
       const token = (client.handshake.auth?.token as string) ?? '';
-      const payload = await this.jwt.verifyAsync(token, {
-        secret: this.config.getOrThrow('JWT_ACCESS_SECRET'),
-      });
+      const payload = await this.jwt.verifyAsync(token, { secret: this.config.getOrThrow('JWT_ACCESS_SECRET') });
       const userId = payload.sub as string;
       client.data.userId = userId;
 
       client.join(`user:${userId}`);
-      const memberships = await this.prisma.chatMember.findMany({
-        where: { userId },
-        select: { chatId: true },
-      });
-      memberships.forEach((m) => client.join(`chat:${m.chatId}`));
+      const chatIds = await this.chatIdsOf(userId);
+      chatIds.forEach((id) => client.join(`chat:${id}`));
 
-      const set = this.online.get(userId) ?? new Set();
-      set.add(client.id);
-      this.online.set(userId, set);
-      if (set.size === 1) this.server.emit('presence', { userId, online: true });
+      await this.redis.sadd(pkey(userId), client.id);
+      await this.redis.expire(pkey(userId), 86400);
+      const count = await this.redis.scard(pkey(userId));
+      if (count === 1 && chatIds.length) {
+        this.server.to(chatIds.map((id) => `chat:${id}`)).emit('presence', { userId, online: true });
+      }
 
-      // messages sent while offline are now "delivered"
+      // tell this client who among its contacts is already online
+      if (chatIds.length) {
+        const others = await this.prisma.chatMember.findMany({
+          where: { chatId: { in: chatIds }, userId: { not: userId } },
+          select: { userId: true },
+          distinct: ['userId'],
+        });
+        const flags = await Promise.all(others.map((o) => this.redis.scard(pkey(o.userId))));
+        client.emit('presence:snapshot', { online: others.filter((_, i) => flags[i] > 0).map((o) => o.userId) });
+      }
+
       await this.markDeliveredForUser(userId);
     } catch {
       client.disconnect(true);
@@ -56,18 +102,19 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   async handleDisconnect(client: Socket) {
     const userId = client.data.userId as string | undefined;
     if (!userId) return;
-    const set = this.online.get(userId);
-    set?.delete(client.id);
-    if (!set || set.size === 0) {
-      this.online.delete(userId);
-      const lastSeenAt = new Date();
-      await this.prisma.user.update({ where: { id: userId }, data: { lastSeenAt } }).catch(() => undefined);
-      this.server.emit('presence', { userId, online: false, lastSeenAt });
+    try {
+      await this.redis.srem(pkey(userId), client.id);
+      if ((await this.redis.scard(pkey(userId))) === 0) {
+        const lastSeenAt = new Date();
+        await this.prisma.user.update({ where: { id: userId }, data: { lastSeenAt } }).catch(() => undefined);
+        const chatIds = await this.chatIdsOf(userId);
+        if (chatIds.length) {
+          this.server.to(chatIds.map((id) => `chat:${id}`)).emit('presence', { userId, online: false, lastSeenAt });
+        }
+      }
+    } catch {
+      /* never let a disconnect crash the server */
     }
-  }
-
-  emitToUser(userId: string, event: string, payload: unknown) {
-    this.server.to(`user:${userId}`).emit(event, payload);
   }
 
   private async markDeliveredForUser(userId: string) {
@@ -94,23 +141,20 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   @SubscribeMessage('message:send')
   async onSend(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { chatId: string; body?: string; clientId?: string; replyToId?: string; media?: { type: "IMAGE" | "VIDEO" | "AUDIO" | "DOCUMENT"; url: string; mime?: string; name?: string; size?: number } },
+    @MessageBody() data: { chatId: string; body?: string; clientId?: string; replyToId?: string; media?: MediaIn },
   ) {
     const me = client.data.userId as string;
     if (!me || (!data?.body?.trim() && !data?.media?.url)) return { ok: false, error: 'invalid' };
     try {
-      const message = await this.chats.sendMessage(me, data.chatId, data.body ?? "", data.clientId, data.replyToId, data.media);
+      const message = await this.chats.sendMessage(me, data.chatId, data.body ?? '', data.clientId, data.replyToId, data.media);
       const members = await this.prisma.chatMember.findMany({ where: { chatId: data.chatId }, select: { userId: true } });
       members.forEach((m) => this.server.in(`user:${m.userId}`).socketsJoin(`chat:${data.chatId}`));
       this.server.to(`chat:${data.chatId}`).emit('message:new', message);
 
-      // mark delivered for recipients who are online right now
-      const receipts = await this.prisma.messageReceipt.findMany({
-        where: { messageId: message.id, deliveredAt: null },
-      });
+      const receipts = await this.prisma.messageReceipt.findMany({ where: { messageId: message.id, deliveredAt: null } });
       const now = new Date();
       for (const r of receipts) {
-        if (this.online.has(r.userId)) {
+        if (await this.isOnline(r.userId)) {
           await this.prisma.messageReceipt.update({ where: { id: r.id }, data: { deliveredAt: now } });
           this.server.to(`user:${me}`).emit('message:delivered', {
             messageId: message.id,
@@ -161,8 +205,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
 
   @SubscribeMessage('chat:join')
   async onJoin(@ConnectedSocket() client: Socket, @MessageBody() data: { chatId: string }) {
-    const me = client.data.userId as string;
-    await this.chats.assertMember(data.chatId, me);
+    await this.chats.assertMember(data.chatId, client.data.userId as string);
     client.join(`chat:${data.chatId}`);
     return { ok: true };
   }
@@ -179,7 +222,6 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     const me = client.data.userId as string;
     await this.chats.assertMember(data.chatId, me);
     const now = new Date();
-
     await this.prisma.chatMember.update({
       where: { chatId_userId: { chatId: data.chatId, userId: me } },
       data: { lastReadAt: now },
