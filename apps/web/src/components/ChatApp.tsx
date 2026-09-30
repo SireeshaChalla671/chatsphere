@@ -5,6 +5,9 @@ import { API, api, getTokens } from '@/lib/api';
 import type { Chat, Message, User } from '@/lib/types';
 import { useCalls } from '@/lib/useCalls';
 import NewGroup from '@/components/NewGroup';
+import CallHistory from '@/components/CallHistory';
+import ThemeToggle from '@/components/ThemeToggle';
+import PwaRegister from '@/components/PwaRegister';
 import MessageContent, { mediaLabel } from '@/components/MessageContent';
 import MediaButtons, { type MediaInfo } from '@/components/MediaButtons';
 
@@ -38,6 +41,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
   const [results, setResults] = useState<User[]>([]);
   const [searched, setSearched] = useState(false);
   const calls = useCalls(me?.id);  const [showGroup, setShowGroup] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [sq, setSq] = useState('');
@@ -198,7 +202,13 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="h-screen flex bg-slate-950 text-slate-100">
-      {calls.overlay}{showGroup && <NewGroup onClose={() => setShowGroup(false)} onCreated={async (id) => { setShowGroup(false); await loadChats(); openChat(id); }} />}
+      {calls.overlay}<PwaRegister />
+      {showHistory && (
+        <CallHistory onClose={() => setShowHistory(false)} onCallBack={(chatId, type) => {
+          const ch = chats.find((x) => x.id === chatId);
+          if (ch) { setShowHistory(false); calls.start(chatId, type, titleOf(ch, me.id)); }
+        }} />
+      )}{showGroup && <NewGroup onClose={() => setShowGroup(false)} onCreated={async (id) => { setShowGroup(false); await loadChats(); openChat(id); }} />}
       {/* Sidebar */}
       <aside className={(activeId ? 'hidden md:flex ' : 'flex ') + 'w-full md:w-96 flex-col border-r border-slate-800 bg-slate-900'}>
         <div className="flex items-center justify-between p-3 bg-slate-800">
@@ -206,7 +216,11 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
             <span className="h-9 w-9 rounded-full bg-emerald-600 flex items-center justify-center font-bold">{(me.name || '?')[0].toUpperCase()}</span>
             <span className="font-medium">{me.name || 'Set your name'}</span>
           </button>
-          <button onClick={onLogout} className="text-xs text-slate-400 hover:text-white">Log out</button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setShowHistory(true)} className="text-xs text-slate-400 hover:text-white">Calls</button>
+            <ThemeToggle />
+            <button onClick={onLogout} className="text-xs text-slate-400 hover:text-white">Log out</button>
+          </div>
         </div>
         <div className="p-3 space-y-2"><button onClick={() => setShowGroup(true)} className="w-full rounded-lg bg-emerald-600 hover:bg-emerald-500 py-2 text-sm font-medium">New group</button>
           <input className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm outline-none focus:ring-2 ring-emerald-500"
