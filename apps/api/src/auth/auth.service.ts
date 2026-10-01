@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import bcrypt from 'bcryptjs';
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { MailService } from '../mail/mail.service.js';
 
 const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
 
@@ -13,6 +14,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private mail?: MailService,
   ) {}
 
   private normalize(identifier: string) {
@@ -42,7 +44,8 @@ export class AuthService {
     });
 
     // DEV ONLY: a real SMS/email provider replaces this later
-    console.log(`[DEV OTP] ${identifier} -> ${code}`);
+    void this.mail?.sendOtp(identifier, code);
+    if (this.config.get('NODE_ENV') !== 'production') console.log(`[DEV OTP] ${identifier} -> ${code}`);
     const isProd = this.config.get('NODE_ENV') === 'production';
     return isProd ? { message: 'OTP sent' } : { message: 'OTP sent (dev mode)', devOtp: code };
   }

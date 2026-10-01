@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ChatsService } from '../chats/chats.service.js';
+import { PushService } from '../push/push.service.js';
 
 type MediaIn = { type: 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT'; url: string; mime?: string; name?: string; size?: number };
 const pkey = (userId: string) => `presence:${userId}`;
@@ -28,6 +29,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     private config: ConfigService,
     private prisma: PrismaService,
     private chats: ChatsService,
+    private push: PushService,
   ) {
     this.redis = new Redis(config.get<string>('REDIS_URL') ?? 'redis://localhost:6379');
     this.redis.on('error', () => undefined);
@@ -150,6 +152,7 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       const members = await this.prisma.chatMember.findMany({ where: { chatId: data.chatId }, select: { userId: true } });
       members.forEach((m) => this.server.in(`user:${m.userId}`).socketsJoin(`chat:${data.chatId}`));
       this.server.to(`chat:${data.chatId}`).emit('message:new', message);
+      void this.pushToOffline(me, data.chatId, message);
 
       const receipts = await this.prisma.messageReceipt.findMany({ where: { messageId: message.id, deliveredAt: null } });
       const now = new Date();
@@ -167,6 +170,28 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
       return { ok: true, message };
     } catch (e) {
       return { ok: false, error: (e as Error).message };
+    }
+  }
+
+    private async pushToOffline(
+    me: string,
+    chatId: string,
+    message: { body?: string | null; type?: string; sender?: { name: string } | null },
+  ) {
+    try {
+      const members = await this.prisma.chatMember.findMany({
+        where: { chatId, userId: { not: me }, muted: false },
+        select: { userId: true },
+      });
+      const label: Record<string, string> = { IMAGE: 'Photo', VIDEO: 'Video', AUDIO: 'Voice message', DOCUMENT: 'Document' };
+      const body = message.body || label[message.type ?? ''] || 'New message';
+      for (const m of members) {
+        if (!(await this.isOnline(m.userId))) {
+          await this.push.notify(m.userId, { title: message.sender?.name || 'New message', body, url: '/', tag: 'chat:' + chatId });
+        }
+      }
+    } catch {
+      /* push must never break message delivery */
     }
   }
 

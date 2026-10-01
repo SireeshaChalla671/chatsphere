@@ -8,6 +8,7 @@ import NewGroup from '@/components/NewGroup';
 import CallHistory from '@/components/CallHistory';
 import StatusPanel from '@/components/StatusPanel';
 import ThemeToggle from '@/components/ThemeToggle';
+import NotifyButton from '@/components/NotifyButton';
 import PwaRegister from '@/components/PwaRegister';
 import MessageContent, { mediaLabel } from '@/components/MessageContent';
 import MediaButtons, { type MediaInfo } from '@/components/MediaButtons';
@@ -223,7 +224,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
           <div className="flex items-center gap-3">
             <button onClick={() => setShowStatus(true)} className="text-xs text-slate-400 hover:text-white">Status</button>
             <button onClick={() => setShowHistory(true)} className="text-xs text-slate-400 hover:text-white">Calls</button>
-            <ThemeToggle />
+            <NotifyButton /><ThemeToggle />
             <button onClick={onLogout} className="text-xs text-slate-400 hover:text-white">Log out</button>
           </div>
         </div>

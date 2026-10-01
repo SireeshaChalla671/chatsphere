@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ChatsService } from '../chats/chats.service.js';
 import { RealtimeGateway } from '../realtime/realtime.gateway.js';
+import { PushService } from '../push/push.service.js';
 
 const MAX_PARTICIPANTS = 10;
 const userSelect = { id: true, name: true, avatarUrl: true } as const;
@@ -31,6 +32,7 @@ export class CallsService {
     private config: ConfigService,
     private chats: ChatsService,
     private gateway: RealtimeGateway,
+    private push?: PushService,
   ) {
     this.key = config.getOrThrow('LIVEKIT_API_KEY');
     this.secret = config.getOrThrow('LIVEKIT_API_SECRET');
@@ -48,7 +50,19 @@ export class CallsService {
     const members = await this.prisma.chatMember.findMany({ where: { chatId }, select: { userId: true } });
     members
       .filter((m) => m.userId !== exceptUserId)
-      .forEach((m) => this.gateway.emitToUser(m.userId, event, payload));
+      .forEach((m) => {
+        this.gateway.emitToUser(m.userId, event, payload);
+        if (event === 'call:incoming') {
+          const p = payload as { fromName?: string; call?: { type?: string } };
+          void this.push?.notify(m.userId, {
+            title: 'Incoming ' + (p.call?.type === 'VIDEO' ? 'video' : 'voice') + ' call',
+            body: p.fromName ?? 'Someone is calling',
+            url: '/',
+            tag: 'call',
+            requireInteraction: true,
+          });
+        }
+      });
   }
 
   private async getCall(callId: string) {
