@@ -19,7 +19,9 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
-    "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
+    "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:flow": "vitest run --config vitest.flow.config.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
