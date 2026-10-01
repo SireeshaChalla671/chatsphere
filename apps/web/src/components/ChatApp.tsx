@@ -124,6 +124,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
 
       s.on('typing', (d: { chatId: string; typing: boolean }) => setTyping((p) => ({ ...p, [d.chatId]: d.typing })));
       s.on('presence:snapshot', (d: { online: string[] }) => setOnline((p) => new Set([...p, ...d.online])));
+      s.on('presence:snapshot', (d: { online: string[] }) => setOnline((p) => new Set([...p, ...d.online])));
       s.on('presence', (d: { userId: string; online: boolean }) =>
         setOnline((p) => { const n = new Set(p); if (d.online) n.add(d.userId); else n.delete(d.userId); return n; }));
     })();

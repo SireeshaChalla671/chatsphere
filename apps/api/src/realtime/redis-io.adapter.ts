@@ -1,11 +1,10 @@
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { Redis } from 'ioredis';
-import type { ServerOptions } from 'socket.io';
 
 // Lets several API servers share one Socket.IO room space through Redis.
 export class RedisIoAdapter extends IoAdapter {
-  private adapterConstructor?: ReturnType<typeof createAdapter>;
+  private adapterConstructor?: unknown;
 
   connectToRedis(url: string) {
     const pub = new Redis(url);
@@ -15,9 +14,10 @@ export class RedisIoAdapter extends IoAdapter {
     this.adapterConstructor = createAdapter(pub, sub);
   }
 
-  createIOServer(port: number, options?: ServerOptions) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  createIOServer(port: number, options?: any): any {
     const server = super.createIOServer(port, options);
-    if (this.adapterConstructor) server.adapter(this.adapterConstructor);
+    if (this.adapterConstructor) server.adapter(this.adapterConstructor as never);
     return server;
   }
 }
