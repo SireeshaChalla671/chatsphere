@@ -6,6 +6,7 @@ import type { Chat, Message, User } from '@/lib/types';
 import { useCalls } from '@/lib/useCalls';
 import NewGroup from '@/components/NewGroup';
 import CallHistory from '@/components/CallHistory';
+import StatusPanel from '@/components/StatusPanel';
 import ThemeToggle from '@/components/ThemeToggle';
 import PwaRegister from '@/components/PwaRegister';
 import MessageContent, { mediaLabel } from '@/components/MessageContent';
@@ -42,6 +43,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
   const [searched, setSearched] = useState(false);
   const calls = useCalls(me?.id);  const [showGroup, setShowGroup] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showStatus, setShowStatus] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [editing, setEditing] = useState<Message | null>(null);
   const [sq, setSq] = useState('');
@@ -204,7 +206,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
 
   return (
     <div className="h-screen flex bg-slate-950 text-slate-100">
-      {calls.overlay}<PwaRegister />
+      {calls.overlay}<PwaRegister />{showStatus && <StatusPanel onClose={() => setShowStatus(false)} />}
       {showHistory && (
         <CallHistory onClose={() => setShowHistory(false)} onCallBack={(chatId, type) => {
           const ch = chats.find((x) => x.id === chatId);
@@ -219,6 +221,7 @@ export default function ChatApp({ onLogout }: { onLogout: () => void }) {
             <span className="font-medium">{me.name || 'Set your name'}</span>
           </button>
           <div className="flex items-center gap-3">
+            <button onClick={() => setShowStatus(true)} className="text-xs text-slate-400 hover:text-white">Status</button>
             <button onClick={() => setShowHistory(true)} className="text-xs text-slate-400 hover:text-white">Calls</button>
             <ThemeToggle />
             <button onClick={onLogout} className="text-xs text-slate-400 hover:text-white">Log out</button>

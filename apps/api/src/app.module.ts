@@ -9,6 +9,7 @@ import { ChatsModule } from './chats/chats.module.js';
 import { RealtimeModule } from './realtime/realtime.module.js';
 import { CallsModule } from './calls/calls.module.js';
 import { MediaModule } from './media/media.module.js';
+import { StatusModule } from './status/status.module.js';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { MediaModule } from './media/media.module.js';
     RealtimeModule,
     CallsModule,
     MediaModule,
+    StatusModule,
   ],
   controllers: [AppController],
   providers: [AppService],

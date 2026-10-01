@@ -26,6 +26,8 @@ model User {
   receipts           MessageReceipt[]
   callsStarted       Call[]            @relation("CallInitiator")
   callParticipations CallParticipant[]
+  statuses           Status[]
+  statusViews        StatusView[]
   reactions          Reaction[]
 }
 
@@ -200,4 +202,30 @@ model Reaction {
   createdAt DateTime @default(now())
 
   @@unique([messageId, userId])
+}
+
+model Status {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String?
+  bgColor   String?
+  mediaUrl  String?
+  mediaType String?
+  createdAt DateTime     @default(now())
+  expiresAt DateTime
+  views     StatusView[]
+
+  @@index([userId, expiresAt])
+}
+
+model StatusView {
+  id       String   @id @default(uuid())
+  statusId String
+  status   Status   @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  viewerId String
+  viewer   User     @relation(fields: [viewerId], references: [id], onDelete: Cascade)
+  viewedAt DateTime @default(now())
+
+  @@unique([statusId, viewerId])
 }
