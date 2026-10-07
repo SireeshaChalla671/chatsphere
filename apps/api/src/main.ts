@@ -14,6 +14,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const prod = process.env.NODE_ENV === 'production';
 
+  (app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set('trust proxy', 1);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   const mult = prod ? 1 : 20; // relaxed in development so load tests work
   app.use(rateLimit({ windowMs: 60_000, max: 600 * mult, authMax: 30 * mult }));
