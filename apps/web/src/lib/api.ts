@@ -1,4 +1,4 @@
-export const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+export const API = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
 type Tokens = { accessToken: string; refreshToken: string };
 
 export const getTokens = (): Tokens | null => {
